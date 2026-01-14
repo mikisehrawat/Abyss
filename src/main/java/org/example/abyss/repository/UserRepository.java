@@ -2,14 +2,15 @@ package org.example.abyss.repository;
 
 import org.example.abyss.domain.User;
 import org.springframework.data.jpa.repository.JpaRepository;
-import org.springframework.stereotype.Repository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 import java.util.Optional;
-import java.util.UUID;
 
-@Repository
-public interface UserRepository extends JpaRepository<User, UUID> {
-    Optional<User> findByEmail(String email);
+public interface UserRepository extends JpaRepository<User, Integer> {
 
-    Boolean existsByEmail(String email);
+    @Query("SELECT u FROM User u LEFT JOIN FETCH u.identities WHERE u.email = :email")
+    Optional<User> findByEmail(@Param("email") String email);
+
+    boolean existsByEmail(String email);
 }
