@@ -10,6 +10,9 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.example.abyss.service.GoogleAuthService;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 
 @RestController
 @RequestMapping("/api/v1/auth")
@@ -30,5 +33,23 @@ public class AuthController {
             @RequestBody AuthenticationRequest request
     ) {
         return ResponseEntity.ok(service.authenticate(request));
+    }
+
+    private final GoogleAuthService googleAuthService;
+
+    @GetMapping("/google/url")
+    public ResponseEntity<String> getGoogleUrl() {
+        return ResponseEntity.ok(googleAuthService.getGoogleLoginUrl());
+    }
+
+    @GetMapping("/callback/google")
+    public ResponseEntity<AuthenticationResponse> handleGoogleCallback(
+            @RequestParam("code") String code
+    ) {
+        String accessToken = googleAuthService.getAccessToken(code);
+
+        var googleUser = googleAuthService.getUserInfo(accessToken);
+
+        return ResponseEntity.ok(service.authenticateGoogle(googleUser));
     }
 }

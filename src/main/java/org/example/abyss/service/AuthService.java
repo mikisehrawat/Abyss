@@ -13,6 +13,9 @@ import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.example.abyss.domain.ProviderType;
+import org.example.abyss.service.GoogleAuthService.GoogleUserDTO;
+
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -80,6 +83,48 @@ public class AuthService {
         var springUser = new org.springframework.security.core.userdetails.User(
                 user.getEmail(),
                 passwordHash,
+                Collections.emptyList()
+        );
+
+        var jwtToken = jwtService.generateToken(springUser);
+
+        return AuthenticationResponse.builder()
+                .token(jwtToken)
+                .build();
+    }
+
+    public AuthenticationResponse authenticateGoogle(GoogleUserDTO googleUser) {
+        // 1. Check if user exists by email
+        User user = repository.findByEmail(googleUser.getEmail())
+                .orElseGet(() -> {
+                    // IF NEW USER: Create them
+                    var newUser = User.builder()
+                            .name(googleUser.getName())
+                            .email(googleUser.getEmail())
+                            .imageUrl(googleUser.getPicture())
+                            .identities(new ArrayList<>())
+                            .build();
+                    return repository.save(newUser);
+                });
+
+        boolean hasGoogleIdentity = user.getIdentities().stream()
+                .anyMatch(i -> ProviderType.GOOGLE.equals(i.getProvider()));
+
+        if (!hasGoogleIdentity) {
+            var identity = Identity.builder()
+                    .provider(ProviderType.GOOGLE)
+                    .providerId(googleUser.getSub()) // Google's unique ID
+                    .credential(null) // No password for Google
+                    .user(user)
+                    .build();
+
+            user.getIdentities().add(identity);
+            repository.save(user);
+        }
+
+        var springUser = new org.springframework.security.core.userdetails.User(
+                user.getEmail(),
+                "",
                 Collections.emptyList()
         );
 
