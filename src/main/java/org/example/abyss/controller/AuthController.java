@@ -1,18 +1,14 @@
 package org.example.abyss.controller;
 
+import jakarta.servlet.http.HttpServletRequest; // <--- Make sure this is imported
 import lombok.RequiredArgsConstructor;
 import org.example.abyss.dto.AuthenticationRequest;
 import org.example.abyss.dto.AuthenticationResponse;
 import org.example.abyss.dto.RegisterRequest;
 import org.example.abyss.service.AuthService;
-import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
 import org.example.abyss.service.GoogleAuthService;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/api/v1/auth")
@@ -20,6 +16,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 public class AuthController {
 
     private final AuthService service;
+    private final GoogleAuthService googleAuthService;
 
     @PostMapping("/register")
     public ResponseEntity<AuthenticationResponse> register(
@@ -35,8 +32,6 @@ public class AuthController {
         return ResponseEntity.ok(service.authenticate(request));
     }
 
-    private final GoogleAuthService googleAuthService;
-
     @GetMapping("/google/url")
     public ResponseEntity<String> getGoogleUrl() {
         return ResponseEntity.ok(googleAuthService.getGoogleLoginUrl());
@@ -47,9 +42,15 @@ public class AuthController {
             @RequestParam("code") String code
     ) {
         String accessToken = googleAuthService.getAccessToken(code);
-
         var googleUser = googleAuthService.getUserInfo(accessToken);
-
         return ResponseEntity.ok(service.authenticateGoogle(googleUser));
+    }
+
+    // --- THIS WAS MISSING ---
+    @PostMapping("/refresh-token")
+    public ResponseEntity<AuthenticationResponse> refreshToken(
+            HttpServletRequest request
+    ) {
+        return ResponseEntity.ok(service.refreshToken(request));
     }
 }

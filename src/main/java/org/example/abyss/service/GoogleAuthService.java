@@ -1,7 +1,7 @@
 package org.example.abyss.service;
 
-import lombok.Data;
 import lombok.RequiredArgsConstructor;
+import org.example.abyss.dto.GoogleUserDTO; // <--- IMPORTANT: Using the shared DTO
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.*;
 import org.springframework.stereotype.Service;
@@ -26,6 +26,7 @@ public class GoogleAuthService {
 
     private final RestTemplate restTemplate = new RestTemplate();
 
+    // 1. GENERATE LOGIN URL
     public String getGoogleLoginUrl() {
         return "https://accounts.google.com/o/oauth2/v2/auth?" +
                 "client_id=" + clientId +
@@ -58,6 +59,7 @@ public class GoogleAuthService {
         }
     }
 
+    // 3. GET USER INFO (Updated to use Shared DTO)
     public GoogleUserDTO getUserInfo(String accessToken) {
         String url = "https://www.googleapis.com/oauth2/v3/userinfo";
 
@@ -66,6 +68,7 @@ public class GoogleAuthService {
         HttpEntity<String> entity = new HttpEntity<>(headers);
 
         try {
+            // Now strictly uses org.example.abyss.dto.GoogleUserDTO
             ResponseEntity<GoogleUserDTO> response = restTemplate.exchange(url, HttpMethod.GET, entity, GoogleUserDTO.class);
             return response.getBody();
         } catch (Exception e) {
@@ -73,11 +76,5 @@ public class GoogleAuthService {
         }
     }
 
-    @Data
-    public static class GoogleUserDTO {
-        private String sub;
-        private String name;
-        private String email;
-        private String picture;
-    }
+    // REMOVED: The inner "static class GoogleUserDTO" is deleted.
 }
