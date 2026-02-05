@@ -1,6 +1,6 @@
 package org.example.abyss.service;
 
-import jakarta.servlet.http.HttpServletRequest; // <--- Added this
+import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import org.example.abyss.domain.Identity;
 import org.example.abyss.domain.ProviderType;
@@ -14,7 +14,7 @@ import org.example.abyss.dto.RegisterRequest;
 import org.example.abyss.repository.TokenRepository;
 import org.example.abyss.repository.UserRepository;
 import org.example.abyss.security.JwtService;
-import org.springframework.http.HttpHeaders; // <--- Added this
+import org.springframework.http.HttpHeaders;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -96,7 +96,7 @@ public class AuthService {
                 .build();
     }
 
-    // --- 3. GOOGLE AUTH ---
+    // --- 3a. GOOGLE AUTH ---
     public AuthenticationResponse authenticateGoogle(GoogleUserDTO googleUser) {
         User user = repository.findByEmail(googleUser.getEmail())
                 .orElseGet(() -> {
@@ -122,6 +122,48 @@ public class AuthService {
             repository.save(user);
         }
 
+        var springUser = new org.springframework.security.core.userdetails.User(user.getEmail(), "", Collections.emptyList());
+        var jwtToken = jwtService.generateToken(springUser);
+        var refreshToken = jwtService.generateRefreshToken(springUser);
+
+        revokeAllUserTokens(user);
+        saveUserToken(user, jwtToken);
+
+        return AuthenticationResponse.builder()
+                .accessToken(jwtToken)
+                .refreshToken(refreshToken)
+                .build();
+    }
+
+    // --- 3b. GITHUB AUTH (NEW) ---
+    public AuthenticationResponse authenticateGithub(GoogleUserDTO githubUser) {
+        // 1. Find or Create User
+        User user = repository.findByEmail(githubUser.getEmail())
+                .orElseGet(() -> {
+                    var newUser = User.builder()
+                            .name(githubUser.getName())
+                            .email(githubUser.getEmail())
+                            .imageUrl(githubUser.getPicture())
+                            .identities(new ArrayList<>())
+                            .build();
+                    return repository.save(newUser);
+                });
+
+        // 2. Check/Add GitHub Identity
+        boolean hasGithubIdentity = user.getIdentities().stream()
+                .anyMatch(i -> ProviderType.GITHUB.equals(i.getProvider()));
+
+        if (!hasGithubIdentity) {
+            var identity = Identity.builder()
+                    .provider(ProviderType.GITHUB)
+                    .providerId(githubUser.getSub())
+                    .user(user)
+                    .build();
+            user.getIdentities().add(identity);
+            repository.save(user);
+        }
+
+        // 3. Generate Tokens
         var springUser = new org.springframework.security.core.userdetails.User(user.getEmail(), "", Collections.emptyList());
         var jwtToken = jwtService.generateToken(springUser);
         var refreshToken = jwtService.generateRefreshToken(springUser);

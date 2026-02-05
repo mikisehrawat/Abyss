@@ -6,6 +6,7 @@ import org.example.abyss.dto.AuthenticationRequest;
 import org.example.abyss.dto.AuthenticationResponse;
 import org.example.abyss.dto.RegisterRequest;
 import org.example.abyss.service.AuthService;
+import org.example.abyss.service.GithubAuthService;
 import org.example.abyss.service.GoogleAuthService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -17,6 +18,7 @@ public class AuthController {
 
     private final AuthService service;
     private final GoogleAuthService googleAuthService;
+    private final GithubAuthService githubAuthService;
 
     @PostMapping("/register")
     public ResponseEntity<AuthenticationResponse> register(
@@ -52,5 +54,18 @@ public class AuthController {
             HttpServletRequest request
     ) {
         return ResponseEntity.ok(service.refreshToken(request));
+    }
+    @GetMapping("/github/url")
+    public ResponseEntity<String> getGithubUrl() {
+        return ResponseEntity.ok(githubAuthService.getGithubLoginUrl());
+    }
+
+    @GetMapping("/callback/github")
+    public ResponseEntity<AuthenticationResponse> handleGithubCallback(
+            @RequestParam("code") String code
+    ) {
+        String accessToken = githubAuthService.getAccessToken(code);
+        var githubUser = githubAuthService.getUserInfo(accessToken);
+        return ResponseEntity.ok(service.authenticateGithub(githubUser));
     }
 }
