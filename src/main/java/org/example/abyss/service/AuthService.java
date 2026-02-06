@@ -2,11 +2,7 @@ package org.example.abyss.service;
 
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
-import org.example.abyss.domain.Identity;
-import org.example.abyss.domain.ProviderType;
-import org.example.abyss.domain.Token;
-import org.example.abyss.domain.TokenType;
-import org.example.abyss.domain.User;
+import org.example.abyss.domain.*;
 import org.example.abyss.dto.AuthenticationRequest;
 import org.example.abyss.dto.AuthenticationResponse;
 import org.example.abyss.dto.GoogleUserDTO;
@@ -17,11 +13,12 @@ import org.example.abyss.security.JwtService;
 import org.springframework.http.HttpHeaders;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
-import java.util.Collections;
+import java.util.List;
 
 @Service
 @RequiredArgsConstructor
@@ -42,6 +39,7 @@ public class AuthService {
         var user = User.builder()
                 .name(request.getName())
                 .email(request.getEmail())
+                .role(Role.USER) // Default Role
                 .identities(new ArrayList<>())
                 .build();
 
@@ -55,12 +53,11 @@ public class AuthService {
         user.getIdentities().add(identity);
         var savedUser = repository.save(user);
 
-        // Generate Tokens
-        var springUser = new org.springframework.security.core.userdetails.User(user.getEmail(), identity.getCredential(), Collections.emptyList());
+        // FIX: Use helper to bake ROLE into the token
+        var springUser = createSpringUser(savedUser);
         var jwtToken = jwtService.generateToken(springUser);
         var refreshToken = jwtService.generateRefreshToken(springUser);
 
-        // Save Token to DB
         saveUserToken(savedUser, jwtToken);
 
         return AuthenticationResponse.builder()
@@ -77,13 +74,8 @@ public class AuthService {
 
         var user = repository.findByEmail(request.getEmail()).orElseThrow();
 
-        // Find credential for Spring User
-        String passwordHash = user.getIdentities().stream()
-                .filter(i -> ProviderType.LOCAL.equals(i.getProvider()))
-                .findFirst().map(Identity::getCredential).orElse("");
-
-        var springUser = new org.springframework.security.core.userdetails.User(user.getEmail(), passwordHash, Collections.emptyList());
-
+        // FIX: Use helper for consistency
+        var springUser = createSpringUser(user);
         var jwtToken = jwtService.generateToken(springUser);
         var refreshToken = jwtService.generateRefreshToken(springUser);
 
@@ -101,6 +93,7 @@ public class AuthService {
         User user = repository.findByEmail(googleUser.getEmail())
                 .orElseGet(() -> {
                     var newUser = User.builder()
+                            .role(Role.USER)
                             .name(googleUser.getName())
                             .email(googleUser.getEmail())
                             .imageUrl(googleUser.getPicture())
@@ -122,7 +115,8 @@ public class AuthService {
             repository.save(user);
         }
 
-        var springUser = new org.springframework.security.core.userdetails.User(user.getEmail(), "", Collections.emptyList());
+        // FIX: Use helper
+        var springUser = createSpringUser(user);
         var jwtToken = jwtService.generateToken(springUser);
         var refreshToken = jwtService.generateRefreshToken(springUser);
 
@@ -135,12 +129,12 @@ public class AuthService {
                 .build();
     }
 
-    // --- 3b. GITHUB AUTH (NEW) ---
+    // --- 3b. GITHUB AUTH ---
     public AuthenticationResponse authenticateGithub(GoogleUserDTO githubUser) {
-        // 1. Find or Create User
         User user = repository.findByEmail(githubUser.getEmail())
                 .orElseGet(() -> {
                     var newUser = User.builder()
+                            .role(Role.USER)
                             .name(githubUser.getName())
                             .email(githubUser.getEmail())
                             .imageUrl(githubUser.getPicture())
@@ -149,7 +143,6 @@ public class AuthService {
                     return repository.save(newUser);
                 });
 
-        // 2. Check/Add GitHub Identity
         boolean hasGithubIdentity = user.getIdentities().stream()
                 .anyMatch(i -> ProviderType.GITHUB.equals(i.getProvider()));
 
@@ -163,8 +156,8 @@ public class AuthService {
             repository.save(user);
         }
 
-        // 3. Generate Tokens
-        var springUser = new org.springframework.security.core.userdetails.User(user.getEmail(), "", Collections.emptyList());
+        // FIX: Use helper
+        var springUser = createSpringUser(user);
         var jwtToken = jwtService.generateToken(springUser);
         var refreshToken = jwtService.generateRefreshToken(springUser);
 
@@ -194,9 +187,10 @@ public class AuthService {
             var user = this.repository.findByEmail(userEmail)
                     .orElseThrow();
 
-            if (jwtService.isTokenValid(refreshToken, new org.springframework.security.core.userdetails.User(user.getEmail(), "", Collections.emptyList()))) {
+            // FIX: Validate using the role-aware Spring User
+            if (jwtService.isTokenValid(refreshToken, createSpringUser(user))) {
 
-                var accessToken = jwtService.generateToken(new org.springframework.security.core.userdetails.User(user.getEmail(), "", Collections.emptyList()));
+                var accessToken = jwtService.generateToken(createSpringUser(user));
 
                 revokeAllUserTokens(user);
                 saveUserToken(user, accessToken);
@@ -232,5 +226,14 @@ public class AuthService {
             token.setRevoked(true);
         });
         tokenRepository.saveAll(validUserTokens);
+    }
+
+    // --- CENTRALIZED USER CREATION ---
+    private org.springframework.security.core.userdetails.User createSpringUser(User user) {
+        return new org.springframework.security.core.userdetails.User(
+                user.getEmail(),
+                "", // Password not needed for token generation
+                List.of(new SimpleGrantedAuthority("ROLE_" + user.getRole().name()))
+        );
     }
 }

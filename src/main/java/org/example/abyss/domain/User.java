@@ -2,36 +2,35 @@ package org.example.abyss.domain;
 
 import jakarta.persistence.*;
 import lombok.*;
-import java.util.*;
+import java.util.List;
 
+@Data
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
 @Entity
 @Table(name = "users")
-@Getter @Setter
-@NoArgsConstructor @AllArgsConstructor
-@Builder
 public class User {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.UUID)
-    private UUID id;
-    @Column(unique = true)
-    private String email;
+    @GeneratedValue // Default UUID generation
+    private java.util.UUID id;
 
     private String name;
 
+    @Column(unique = true)
+    private String email;
+
     private String imageUrl;
 
-    @Builder.Default
     private boolean enabled = true;
 
-    @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, orphanRemoval = true)
-    private List<Identity> identities = new ArrayList<>();
+    private Long createdAt = System.currentTimeMillis();
 
-    // Auditing
-    private Long createdAt;
+    // --- NEW FIELD ---
+    @Enumerated(EnumType.STRING) // Stores "USER" or "ADMIN" as text
+    private Role role;
 
-    @PrePersist
-    protected void onCreate() {
-        this.createdAt = System.currentTimeMillis();
-    }
+    @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, fetch = FetchType.EAGER)
+    private List<Identity> identities;
 }
